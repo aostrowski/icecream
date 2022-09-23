@@ -53,3 +53,4 @@ tests/listing.txt
 # others
 compile_commands.json
 .vs*
+.cache/
