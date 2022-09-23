@@ -256,7 +256,7 @@ int work_it(CompileJob &j, unsigned int job_stat[], MsgChannel *client, CompileR
             }
         }
 
-        if( clang ) {
+        if( clang && !clang_tidy) {
             // gcc seems to handle setting main file name and working directory fine
             // (it gets it from the preprocessed info), but clang needs help
             if( !j.inputFile().empty()) {
@@ -287,9 +287,17 @@ int work_it(CompileJob &j, unsigned int job_stat[], MsgChannel *client, CompileR
             argv[i++] = strdup("-fpreprocessed");
         }
 
-        argv[i++] = strdup("-");
-        argv[i++] = strdup("-o");
-        argv[i++] = strdup(file_name.c_str());
+        if (!clang_tidy)
+            argv[i++] = strdup("-");
+        else {
+            argv[i++] = strdup(j.inputFile().c_str());
+            argv[i++] = strdup("--");
+        }
+
+        if (!clang_tidy) {
+            argv[i++] = strdup("-o");
+            argv[i++] = strdup(file_name.c_str());
+        }
 
         if (!clang) {
             argv[i++] = strdup("--param");
@@ -300,7 +308,7 @@ int work_it(CompileJob &j, unsigned int job_stat[], MsgChannel *client, CompileR
             argv[i++] = strdup(buffer);
         }
 
-        if (clang) {
+        if (clang && !clang_tidy) {
             argv[i++] = strdup("-no-canonical-prefixes");    // otherwise clang tries to access /proc/self/exe
         }
 

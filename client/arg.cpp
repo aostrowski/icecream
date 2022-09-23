@@ -23,6 +23,7 @@
 
 #include "config.h"
 
+#include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -34,6 +35,8 @@
 #include <sys/stat.h>
 
 #include "client.h"
+#include "job.h"
+#include "logging.h"
 
 using namespace std;
 
@@ -110,6 +113,34 @@ static bool analyze_program(const char *name, CompileJob &job, bool& icerun)
     }
 
     return false;
+}
+
+static bool is_tidy_arg(const std::string& argument) {
+    static std::vector<std::string> tidy_args = {
+        "-checks",
+        "-config",
+        "-dump-config",
+        "-enable-check-profile",
+        "-explain-config",
+        "-export-fixes",
+        "-extra-arg",
+        "-extra-arg-before",
+        "-fix",
+        "-fix-errors",
+        "-format-style",
+        "-header-filter",
+        "-line-filter",
+        "-list-checks",
+        "-quiet",
+        "-store-check-profile",
+        "-system-headers",
+        "-vfsoverlay",
+        "-warnings-as-errors",
+        "-p",
+    };
+    return std::find_if(std::begin(tidy_args), std::end(tidy_args), 
+    [&] (const string& tidy_arg) { return argument.find(tidy_arg) != string::npos; }
+    ) != std::end(tidy_args);
 }
 
 static bool is_argument_with_space(const char* argument)
@@ -717,7 +748,7 @@ int analyse_argv(const char * const *argv, CompileJob &job, bool icerun, list<st
                 // If -flto will be parallel (and thus use all cores), make it a "full" job
                 // so that it reserves the entire local node. The only non-parallel -flto
                 // options appear to be GCC's -flto without arguments or -flto=1.
-                if( compiler_is_clang(job))
+                if( compiler_is_clang(job) || compiler_is_clang_tidy(job))
                     seen_parallel_flto = a;
                 else if( !str_equal("-flto", a) && !str_equal("-flto=1", a))
                     seen_parallel_flto = a;
@@ -732,27 +763,32 @@ int analyse_argv(const char * const *argv, CompileJob &job, bool icerun, list<st
             }
         } else if (a[0] == '@') {
             args.append(a, Arg_Local);
+        } else if (compiler_is_clang_tidy(job) && is_tidy_arg(a)) {
+            trace() << "Tidy arg: " << a;
+            // TODO
+            args.append(a, Arg_Remote);
         } else {
             args.append(a, Arg_Rest);
         }
     }
+    if (!compiler_is_clang_tidy(job)) {
+        if (!seen_c && !seen_s) {
+            if (!always_local) {
+                log_warning() << "neither -c nor -S argument, building locally" << endl;
+            }
+            always_local = true;
+        } else if (seen_s) {
+            if (seen_c) {
+                log_info() << "can't have both -c and -S, ignoring -c" << endl;
+            }
 
-    if (!seen_c && !seen_s) {
-        if (!always_local) {
-            log_warning() << "neither -c nor -S argument, building locally" << endl;
-        }
-        always_local = true;
-    } else if (seen_s) {
-        if (seen_c) {
-            log_info() << "can't have both -c and -S, ignoring -c" << endl;
-        }
-
-        args.append("-S", Arg_Remote);
-    } else {
-        assert( seen_c );
-        args.append("-c", Arg_Remote);
-        if (seen_split_dwarf) {
-            job.setDwarfFissionEnabled(true);
+            args.append("-S", Arg_Remote);
+        } else {
+            assert( seen_c );
+            args.append("-c", Arg_Remote);
+            if (seen_split_dwarf) {
+                job.setDwarfFissionEnabled(true);
+            }
         }
     }
 
@@ -874,10 +910,10 @@ int analyse_argv(const char * const *argv, CompileJob &job, bool icerun, list<st
     // redirecting compiler's output will turn off its automatic coloring, so force it
     // when it would be used, unless explicitly set
     if (!icerun && compiler_has_color_output(job) && !explicit_color_diagnostics) {
-        if (compiler_is_clang(job))
-            args.append("-fcolor-diagnostics", Arg_Rest);
-        else
-            args.append("-fdiagnostics-color", Arg_Rest); // GCC
+        // if (compiler_is_clang(job) && !!compiler_is_clang_tidy(job))
+        //     args.append("-fcolor-diagnostics", Arg_Rest);
+        // else if (!compiler_is_clang_tidy(job))
+        //     args.append("-fdiagnostics-color", Arg_Rest); // GCC
     }
 
     // -Wunused-macros is tricky with remote preprocessing. GCC's -fdirectives-only outright
@@ -891,17 +927,17 @@ int analyse_argv(const char * const *argv, CompileJob &job, bool icerun, list<st
     // -pedantic doesn't work with remote preprocessing, if extensions to a named standard
     // are allowed.  GCC allows GNU extensions by default, so let's check if a standard
     // other than eg gnu11 or gnu++14 was specified.
-    if( seen_pedantic && !compiler_is_clang(job) && (!standard || str_startswith("gnu", standard)) ) {
+    if( seen_pedantic && !(compiler_is_clang(job) || compiler_is_clang_tidy(job)) && (!standard || str_startswith("gnu", standard)) ) {
         log_warning() << "argument -pedantic, forcing local preprocessing (try using -std=cXX instead of -std=gnuXX)" << endl;
         job.setBlockRewriteIncludes(true);
     }
 
-    if( !always_local && compiler_only_rewrite_includes(job) && !compiler_is_clang(job)) {
+    if( !always_local && compiler_only_rewrite_includes(job) && !compiler_is_clang(job) && !compiler_is_clang_tidy(job)) {
         // Inject this, so that remote compilation uses -fpreprocessed -fdirectives-only
         args.append("-fdirectives-only", Arg_Remote);
     }
 
-    if( !always_local && !seen_target && compiler_is_clang(job)) {
+    if( !always_local && !seen_target && (compiler_is_clang(job))) { // || compiler_is_clang_tidy(job)
         // With gcc each binary can compile only for one target, so cross-compiling is just
         // a matter of using the proper cross-compiler remotely and it will automatically
         // compile for the given platform. However one clang binary can compile for many

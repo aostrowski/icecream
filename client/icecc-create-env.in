@@ -224,6 +224,12 @@ search_addfile()
     local file_installdir=$3
     local file=""
 
+    if [[ $compiler == *clang-tidy* ]]; then
+      compiler=clang++
+    fi
+
+    echo $compiler -print-prog-name=$file_name
+
     file=$($compiler -print-prog-name=$file_name)
     if echo "$compiler" | grep -q "clang-tidy" || echo "$compiler" | grep -q "iwyu" || echo "$compiler" | grep -q "include-what-you-use"; then
       file=$file_name
@@ -310,7 +316,7 @@ elif test "$1" = "--clang"; then
         gcc=1
     fi
 else
-    if [[ $1 == clang-tidy* -o $1 == iwyu* -o $1 == include-what-you-use* ]]; then
+    if [[ $1 == *clang-tidy* ]]; then # -o $1 == iwyu* -o $1 == include-what-you-use* ]]; then
         echo "Recognized $1 -- will treat it like a clang"
         clang=1
         added_clang="$(readlink -f $(which $1))"

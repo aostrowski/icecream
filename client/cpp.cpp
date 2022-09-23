@@ -28,6 +28,7 @@
 
 #include "config.h"
 
+#include <algorithm>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -39,6 +40,34 @@
 #include "logging.h"
 
 using namespace std;
+
+static bool is_tidy_arg(const std::string& argument) {
+    static std::vector<std::string> tidy_args = {
+    "-checks",
+    "-config",
+    "-dump-config",
+    "-enable-check-profile",
+    "-explain-config",
+    "-export-fixes",
+    "-extra-arg",
+    "-extra-arg-before",
+    "-fix",
+    "-fix-errors",
+    "-format-style",
+    "-header-filter",
+    "-line-filter",
+    "-list-checks",
+    "-quiet",
+    "-store-check-profile",
+    "-system-headers",
+    "-vfsoverlay",
+    "-warnings-as-errors",
+    "-p",
+    };
+    return std::find_if(std::begin(tidy_args), std::end(tidy_args), 
+    [&] (const string& tidy_arg) { return argument.find(tidy_arg) != string::npos; }
+    ) != std::end(tidy_args);
+}
 
 bool dcc_is_preprocessed(const string &sfile)
 {
@@ -101,12 +130,6 @@ pid_t call_cpp(CompileJob &job, int fdwrite, int fdread)
 
     if (ret) {  /* set handler back to default */
         _exit(ret);
-    }
-
-    if (job.compilerName().find("clang-tidy") != string::npos) {
-        // TODO: IWYU
-        log_info() << "Skipping preprocessor call for " << job.compilerName();
-        return pid;
     }
 
     char **argv;
@@ -174,18 +197,25 @@ pid_t call_cpp(CompileJob &job, int fdwrite, int fdread)
         argc += 2; // -E file.i
         argc += 1; // -frewrite-includes / -fdirectives-only
         argv = new char*[argc + 1];
-        argv[0] = strdup(find_compiler(job).c_str());
+
+        if (job.compilerName().find("clang-tidy") != string::npos) {
+            argv[0] = strdup("/usr/bin/clang++"); // TODO
+        } else {
+            argv[0] = strdup(find_compiler(job).c_str());
+        }
+
         int i = 1;
 
         for (list<string>::const_iterator it = flags.begin(); it != flags.end(); ++it) {
-            argv[i++] = strdup(it->c_str());
+            if (!is_tidy_arg(*it))
+                argv[i++] = strdup(it->c_str());
         }
 
         argv[i++] = strdup("-E");
         argv[i++] = strdup(job.inputFile().c_str());
 
         if (compiler_only_rewrite_includes(job)) {
-            if( compiler_is_clang(job)) {
+            if( compiler_is_clang(job) || compiler_is_clang_tidy(job)) {
                 argv[i++] = strdup("-frewrite-includes");
             } else { // gcc
                 argv[i++] = strdup("-fdirectives-only");

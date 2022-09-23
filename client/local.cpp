@@ -140,17 +140,19 @@ string find_compiler(const CompileJob &job)
         }
     }
 
+    if (compiler_is_clang_tidy(job)) return "/usr/bin/clang-tidy-10";
+
     return compiler_path_lookup_helper(job.compilerName(), job.compilerPathname());
 }
 
 bool compiler_is_clang_tidy(const CompileJob &job)
 {
-    if (job.language() == CompileJob::Lang_Custom) {
-        return false;
-    }
+    // if (job.language() == CompileJob::Lang_Custom) {
+    //     return false;
+    // }
 
     assert(job.compilerName().find('/') == string::npos);
-    return job.compilerName().find("clang_tidy") != string::npos;
+    return job.compilerName().find("clang-tidy") != string::npos;
 }
 
 bool compiler_is_clang(const CompileJob &job)
@@ -161,7 +163,7 @@ bool compiler_is_clang(const CompileJob &job)
 
     assert(job.compilerName().find('/') == string::npos);
     size_t clang_pos = job.compilerName().find("clang");
-    return clang_pos != string::npos && job.compilerName().substr(clang_pos, 5) != "clang-tidy";
+    return clang_pos != string::npos && job.compilerName().find("clang-tidy") == string::npos;
 }
 
 /*
@@ -211,7 +213,11 @@ bool compiler_only_rewrite_includes(const CompileJob &job)
 
 string clang_get_default_target(const CompileJob &job)
 {
-    return read_command_line( find_compiler( job ), { "-dumpmachine" } );
+    auto compiler =  find_compiler( job );
+    if (compiler.find("clang-tidy") != string::npos) {
+        compiler = "clang++";
+    }
+    return read_command_line(compiler, { "-dumpmachine" } );
 }
 
 bool compiler_get_arch_flags(const CompileJob& job, bool march, bool mcpu, bool mtune, list<string>& args)
@@ -343,16 +349,17 @@ int build_local(CompileJob &job, MsgChannel *local_daemon, struct rusage *used)
     arguments.push_back(compiler_name);
     appendList(arguments, job.allFlags());
 
-    if (!job.outputFile().empty()) {
+    if (!job.outputFile().empty() && !compiler_is_clang_tidy(job)) {
         arguments.push_back("-o");
         arguments.push_back(job.outputFile());
     }
 
     if (!job.inputFile().empty()) {
+      arguments.push_back(job.inputFile());
       if (compiler_is_clang_tidy(job)) {
         arguments.push_back("--");
       }
-      arguments.push_back(job.inputFile());
+
     }
 
     vector<char*> argv; 

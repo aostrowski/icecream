@@ -74,6 +74,7 @@ int main(int argc, char *argv[])
         } else if (extra_icecream_arg.find("iwyu") != std::string::npos
         || extra_icecream_arg.find("include-what-you-use") != std::string::npos)  {
             is_iwyu = true;
+        }
     }
 
     bool haveclangarg = isclang;
@@ -110,7 +111,7 @@ int main(int argc, char *argv[])
 
     int pos = 1;
 
-    if (isclang) {
+    if (isclang && !is_tidy) {
         args[pos++] = (char *)"-no-canonical-prefixes";   // otherwise clang tries to access /proc/self/exe
         // clang wants the -x argument early, otherwise it seems to ignore it
         // (and treats the file as already preprocessed)

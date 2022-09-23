@@ -303,7 +303,7 @@ int start_create_env(const string &basedir, uid_t user_uid, gid_t user_gid,
     const char **argv;
     argv = new const char*[4 + extrafiles.size()];
     int pos = 0;
-    argv[pos++] = BINDIR "/icecc";
+    argv[pos++] = "/home/aostrowski/builds/icecream/bin/icecc";
     argv[pos++] = "--build-native";
     const int first_to_free = pos;
     argv[pos++] = strdup(compiler.c_str());
@@ -320,7 +320,7 @@ int start_create_env(const string &basedir, uid_t user_uid, gid_t user_gid,
     }
 
     if (!exec_and_wait(argv)) {
-        log_error() << BINDIR "/icecc --build-native failed" << endl;
+        log_error() << "icecc --build-native failed" << endl;
         _exit(1);
     }
     for( int i = first_to_free; i < pos; ++i )
