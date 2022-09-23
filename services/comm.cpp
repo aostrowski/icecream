@@ -22,6 +22,7 @@
     51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 */
 
+#include <array>
 #include <config.h>
 
 #include <signal.h>
@@ -2136,6 +2137,11 @@ void CompileFileMsg::fill_from_channel(MsgChannel *c)
     }
 }
 
+namespace {
+    const std::array<const char*, 4> clang_like_tools = {"clang-tidy", "clang", "iwyu", "include-what-you-use"};
+}
+
+
 void CompileFileMsg::send_to_channel(MsgChannel *c) const
 {
     Msg::send_to_channel(c);
@@ -2151,12 +2157,18 @@ void CompileFileMsg::send_to_channel(MsgChannel *c) const
         if (IS_PROTOCOL_30(c)) {
             *c << job->remoteFlags();
         } else {
-            if (job->compilerName().find("clang") != string::npos) {
-                // Hack for compilerwrapper.
-                std::list<std::string> flags = job->remoteFlags();
-                flags.push_front("clang");
-                *c << flags;
-            } else {
+            bool is_clang_like = false;
+            for (const auto name: clang_like_tools) {
+                if (job->compilerName().find(name) != string::npos) {
+                    // Hack for compilerwrapper.
+                    std::list<std::string> flags = job->remoteFlags();
+                    flags.push_front(name);
+                    *c << flags;
+                    is_clang_like = true;
+                    break;
+                }
+            }
+            if (!is_clang_like) {
                 *c << job->remoteFlags();
             }
         }
@@ -2185,8 +2197,10 @@ void CompileFileMsg::send_to_channel(MsgChannel *c) const
 // hardcoded).  For clang, the binary is just clang for both C/C++.
 string CompileFileMsg::remote_compiler_name() const
 {
-    if (job->compilerName().find("clang") != string::npos) {
-        return "clang";
+    for (const auto name : clang_like_tools) {
+        if (job->compilerName().find(name) != string::npos) {
+            return name;
+        }
     }
 
     return job->language() == CompileJob::Lang_CXX ? "g++" : "gcc";

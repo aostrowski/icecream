@@ -246,6 +246,7 @@ inline std::ostream &operator<<( std::ostream &output,
         output << "ObjC++";
         break;
     }
+
     return output;
 }
 

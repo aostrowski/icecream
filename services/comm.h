@@ -511,7 +511,7 @@ public:
     virtual void fill_from_channel(MsgChannel *c);
     virtual void send_to_channel(MsgChannel *c) const;
 
-    std::string compiler; // "gcc", "clang" or the actual binary
+    std::string compiler; // "gcc", "clang", "clang-tidy", etc. or the actual binary
     std::list<std::string> extrafiles;
     std::string compression; // "" (=default), "none", "gzip", "xz", etc.
 };

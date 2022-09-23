@@ -513,7 +513,7 @@ static int build_remote_int(CompileJob &job, UseCSMsg *usecs, MsgChannel *local_
 
         // Older remotes don't set properly -x argument.
         if(( job.language() == CompileJob::Lang_OBJC || job.language() == CompileJob::Lang_OBJCXX )
-            && !IS_PROTOCOL_38(cserver)) {
+            && !IS_PROTOCOL_38(cserver) && !compiler_is_clang_tidy(job)) {
             job.appendFlag( "-x", Arg_Remote );
             job.appendFlag( job.language() == CompileJob::Lang_OBJC ? "objective-c" : "objective-c++", Arg_Remote );
         }

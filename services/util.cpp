@@ -104,6 +104,9 @@ string get_c_compiler(const string& compiler)
     pos = compiler.rfind( "c++" );
     if( pos != string::npos && pos == slash + 1 ) // only exactly "c++"
         return compiler.substr( 0, pos ) + "cc" + compiler.substr( pos + strlen( "c++" ));
+    // TODO: Add IWYU support: ask for --version, pack matching clang(++) compiler if available
+    // pos = compiler.rfind( "iwyu");
+    // pos = compiler.rfind("include-what-you-use");
     assert( false );
     return string();
 }
@@ -119,6 +122,12 @@ string get_cpp_compiler(const string& compiler)
     pos = compiler.rfind( "gcc" );
     if( pos != string::npos && pos >= slash + 1 )
         return compiler.substr( 0, pos ) + "g++" + compiler.substr( pos + strlen( "gcc" ));
+    pos = compiler.rfind( "clang-tidy");
+    if( pos != string::npos && pos >= slash + 1 )
+        return compiler.substr( 0, pos ) + "clang++" + compiler.substr( pos + strlen( "clang-tidy" ));
+    // TODO: Add IWYU support: ask for --version, pack matching clang(++) compiler if available
+    // pos = compiler.rfind( "iwyu");
+    // pos = compiler.rfind("include-what-you-use");
     pos = compiler.rfind( "clang" );
     if( pos != string::npos && pos >= slash + 1 )
         return compiler.substr( 0, pos ) + "clang++" + compiler.substr( pos + strlen( "clang" ));

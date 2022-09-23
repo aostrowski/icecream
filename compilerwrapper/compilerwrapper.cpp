@@ -61,8 +61,25 @@ int main(int argc, char *argv[])
 
     fprintf(stderr, "\n");
 #endif
-    bool isclang = argc >= 2 && strcmp(argv[1], "clang") == 0;   // the extra argument from icecream
+
+    bool isclang = false;
+    bool is_iwyu = false;
+    bool is_tidy = false;
+    std::string extra_icecream_arg = argv[1];
+    if (argc >= 2) {
+        if (extra_icecream_arg.find("clang-tidy") != std::string::npos) {
+            is_tidy = true;
+        } else if (extra_icecream_arg.find("clang") != std::string::npos) {
+            isclang = true;
+        } else if (extra_icecream_arg.find("iwyu") != std::string::npos
+        || extra_icecream_arg.find("include-what-you-use") != std::string::npos)  {
+            is_iwyu = true;
+    }
+
     bool haveclangarg = isclang;
+    bool haveiwyuarg = is_iwyu;
+    bool havetidyarg = is_tidy;
+
     // 1 extra for -no-canonical-prefixes
     char **args = new char*[argc + 2];
     args[0] = new char[strlen(argv[0]) + 20];
@@ -76,8 +93,8 @@ int main(int argc, char *argv[])
             separator[1] = '\0';    // after the separator
         }
 
-        if (isclang) {
-            strcat(args[0], "clang");
+        if (isclang || is_iwyu || is_tidy) {
+            strcat(args[0], argv[1]);
         } else if (iscxx) {
             strcat(args[0], "g++.bin");
         } else {

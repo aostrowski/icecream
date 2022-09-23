@@ -83,8 +83,12 @@ convert_path_cdup ()
 {
   local filename="$1"
   local directory=$(dirname $filename)
-  local fixed_directory=$(cd "$directory" >/dev/null && pwd)
-  echo ${fixed_directory}/$(basename $filename)
+  if [ -d "$directory" ]; then
+    local fixed_directory=$(cd "$directory" >/dev/null && pwd)
+    echo ${fixed_directory}/$(basename $filename)
+  else
+    echo $(realpath -m $filename)
+  fi
 }
 
 add_file ()
@@ -121,7 +125,7 @@ add_file ()
     # Only call ldd when it makes sense
     if file -L "$path" | grep 'ELF' > /dev/null 2>&1; then
 	if ! file -L "$path" | grep 'static' > /dev/null 2>&1; then
-	   # ldd now outputs ld as /lib/ld-linux.so.xx on current nptl based glibc
+	  # ldd now outputs ld as /lib/ld-linux.so.xx on current nptl based glibc
 		# this regexp parse the outputs like:
 		# ldd /usr/bin/gcc
 		#         linux-gate.so.1 =>  (0xffffe000)
@@ -221,6 +225,11 @@ search_addfile()
     local file=""
 
     file=$($compiler -print-prog-name=$file_name)
+    if echo "$compiler" | grep -q "clang-tidy" || echo "$compiler" | grep -q "iwyu" || echo "$compiler" | grep -q "include-what-you-use"; then
+      file=$file_name
+    else
+      file=$($compiler -print-prog-name=$file_name)
+    fi
 
     if test -z "$file" || test "$file" = "$file_name" || ! test -e "$file"; then
         file=$($compiler -print-file-name=$file_name)
@@ -247,6 +256,11 @@ search_addfile()
 
     return 0
 }
+
+if test -z "$1" -o x"$1" == x"-h" -o x"$1" == x"--help"; then
+    usage
+    exit 1
+fi
 
 # backward compat
 if test "$1" = "--respect-path"; then
@@ -296,42 +310,46 @@ elif test "$1" = "--clang"; then
         gcc=1
     fi
 else
-    if test -z "$1"; then
-        usage
-        exit 1
-    fi
-    # We got just a binary, find out what compiler it is and bypass any possible wrappers.
-    # __clang__ expands to 1 if compiler is Clang
-    # __GNUC__ expands to the main version number (and is valid also with Clang)
-    test_output=$(echo "clang __clang__ gcc __GNUC__" | "$1" -E -)
-    if test $? -ne 0; then
-        echo "$1" is not a compiler.
-        exit 1
-    fi
-    if echo "$test_output" | grep -q '^clang 1 gcc.*'; then
+    if [[ $1 == clang-tidy* -o $1 == iwyu* -o $1 == include-what-you-use* ]]; then
+        echo "Recognized $1 -- will treat it like a clang"
         clang=1
-        # With clang, -print-prog-name gives the full path to the actual clang binary,
-        # allowing to bypass any possible wrapper script etc. Note we must pass
-        # just the binary name, not full path.
-        added_clang=$($1 -print-prog-name=$(basename $1))
+        added_clang="$(readlink -f $(which $1))"
         added_compilerwrapper=@PKGLIBEXECDIR@/compilerwrapper
-    elif echo "$test_output" | grep -q 'clang __clang__ gcc.*'; then
-        gcc=1
-        # Gcc's -print-prog-name is useless, as it prints simply "gcc", so we have to
-        # get the location of the actual gcc binary from gcc -v output, which prints
-        # (to stderr) gcc's argv[0] as COLLECT_GCC.
-        added_gcc=$($1 -v 2>&1 | grep COLLECT_GCC= | sed 's/^COLLECT_GCC=//')
-        if test -z "$added_gcc"; then
-            echo Failed to find gcc location.
+    else
+        # We got just a binary, find out what compiler it is and bypass any possible wrappers.
+        # __clang__ expands to 1 if compiler is Clang
+        # __GNUC__ expands to the main version number (and is valid also with Clang)
+        test_output=$(echo "clang __clang__ gcc __GNUC__" | "$1" -E -)
+        if test $? -ne 0; then
+            echo "$1" is not a compiler.
             exit 1
         fi
-        if ! test -x "$added_gcc"; then
-            added_gcc=$(command -v $added_gcc)
+        if echo "$test_output" | grep -q '^clang 1 gcc.*'; then
+            clang=1
+            # With clang, -print-prog-name gives the full path to the actual clang binary,
+            # allowing to bypass any possible wrapper script etc. Note we must pass
+            # just the binary name, not full path.
+            added_clang=$($1 -print-prog-name=$(basename $1))
+            added_compilerwrapper=@PKGLIBEXECDIR@/compilerwrapper
+        elif echo "$test_output" | grep -q 'clang __clang__ gcc.*'; then
+            gcc=1
+            # Gcc's -print-prog-name is useless, as it prints simply "gcc", so we have to
+            # get the location of the actual gcc binary from gcc -v output, which prints
+            # (to stderr) gcc's argv[0] as COLLECT_GCC.
+            added_gcc=$($1 -v 2>&1 | grep COLLECT_GCC= | sed 's/^COLLECT_GCC=//')
+            if test -z "$added_gcc"; then
+                echo Failed to find gcc location.
+                exit 1
+            fi
+            if ! test -x "$added_gcc"; then
+                added_gcc=$(command -v $added_gcc)
+            fi
+        else
+            echo "$1" is not a known compiler.
+            exit 1
         fi
-    else
-        echo "$1" is not a known compiler.
-        exit 1
     fi
+
     shift
     if test -n "$1"; then
         case "$1" in

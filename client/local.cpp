@@ -121,7 +121,7 @@ string compiler_path_lookup(const string& compiler)
 }
 
 /*
- * Get the name of the compiler depedant on the
+ * Get the name of the compiler dependant on the
  * language of the job and the environment
  * variable set. This is useful for native cross-compilers.
  * (arm-linux-gcc for example)
@@ -143,6 +143,16 @@ string find_compiler(const CompileJob &job)
     return compiler_path_lookup_helper(job.compilerName(), job.compilerPathname());
 }
 
+bool compiler_is_clang_tidy(const CompileJob &job)
+{
+    if (job.language() == CompileJob::Lang_Custom) {
+        return false;
+    }
+
+    assert(job.compilerName().find('/') == string::npos);
+    return job.compilerName().find("clang_tidy") != string::npos;
+}
+
 bool compiler_is_clang(const CompileJob &job)
 {
     if (job.language() == CompileJob::Lang_Custom) {
@@ -150,7 +160,8 @@ bool compiler_is_clang(const CompileJob &job)
     }
 
     assert(job.compilerName().find('/') == string::npos);
-    return job.compilerName().find("clang") != string::npos;
+    size_t clang_pos = job.compilerName().find("clang");
+    return clang_pos != string::npos && job.compilerName().substr(clang_pos, 5) != "clang-tidy";
 }
 
 /*
@@ -166,7 +177,7 @@ works similarly to -frewrite-includes (although it's not exactly the same).
 */
 bool compiler_only_rewrite_includes(const CompileJob &job)
 {
-    if( job.blockRewriteIncludes()) {
+    if (job.blockRewriteIncludes() || compiler_is_clang_tidy(job)) {
         return false;
     }
     if (const char *rewrite_includes = getenv("ICECC_REMOTE_CPP")) {
@@ -332,13 +343,16 @@ int build_local(CompileJob &job, MsgChannel *local_daemon, struct rusage *used)
     arguments.push_back(compiler_name);
     appendList(arguments, job.allFlags());
 
-    if (!job.inputFile().empty()) {
-        arguments.push_back(job.inputFile());
-    }
-
     if (!job.outputFile().empty()) {
         arguments.push_back("-o");
         arguments.push_back(job.outputFile());
+    }
+
+    if (!job.inputFile().empty()) {
+      if (compiler_is_clang_tidy(job)) {
+        arguments.push_back("--");
+      }
+      arguments.push_back(job.inputFile());
     }
 
     vector<char*> argv; 

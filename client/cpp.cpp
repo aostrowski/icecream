@@ -36,6 +36,7 @@
 #include <assert.h>
 
 #include "client.h"
+#include "logging.h"
 
 using namespace std;
 
@@ -100,6 +101,12 @@ pid_t call_cpp(CompileJob &job, int fdwrite, int fdread)
 
     if (ret) {  /* set handler back to default */
         _exit(ret);
+    }
+
+    if (job.compilerName().find("clang-tidy") != string::npos) {
+        // TODO: IWYU
+        log_info() << "Skipping preprocessor call for " << job.compilerName();
+        return pid;
     }
 
     char **argv;

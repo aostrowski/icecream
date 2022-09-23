@@ -38,6 +38,8 @@ static void test_3() {
    test_run("3", argv, false, "local:0 language:C++ compiler:clang local:'-D, TEST1=1, -I.' remote:'-c' rest:'-target, x86_64-unknown-linux-gnu'");
 }
 
+
+
 int main() {
     unsetenv( "ICECC_COLOR_DIAGNOSTICS" );
     unsetenv( "ICECC" );
